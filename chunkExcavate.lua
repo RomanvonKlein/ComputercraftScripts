@@ -3,20 +3,29 @@ local arg = {...}
 --this sets the number of sections the mine should have.
 --the total number of mined blocks would be 2*sessionlength*(2*sideTunnelLength + sideTunnelDistance+1)
 --set to -1 to mine indefinitely
-local sessionLength = arg[1] or 10
+
+--this sets the number of sections the mine should have.
+--the total number of mined blocks would be 2*sessionlength*(2*sideTunnelLength + sideTunnelDistance+1)
+--set to -1 to mine indefinitely
+
+local width = tonumber(arg[1]) or 16
+local length = tonumber(arg[2]) or 16
+local height = tonumber(arg[3]) or 99
+
+local sessionLength = 10
 local increment = 1
 if (sessionLength == -1) then
     sessionLength = 2
     increment = 0
 end
 --this sets the distance between the side tunnels
-local sideTunnelDistance = tonumber(arg[2]) or 2
+local sideTunnelDistance = 2
 --this sets the length of the side tunnels
-local sideTunnelLength = tonumber(arg[3]) or 5
+local sideTunnelLength = 5
 --if this is true, the turtle will try to throw away trash items when its inventory is full
-local trashing = tonumber(arg[4]) or false
+local trashing = false
 --if this is true, the turtle will try to break blocks in its way when moving
-local breakStuff = arg[5] or true
+local breakStuff = true
 
 local itemMemory = {}
 local direction = "x+"
@@ -90,9 +99,7 @@ local trashBlocks = {
 
 --when storing its inventory into a chest, the turtle will keep one stack from each of the items in this list
 local keepOneInInventory = {
-    "minecraft:cobblestone",
-    "minecraft:coal",
-    "minecraft:torch"
+    "minecraft:coal"
 }
 
 function turnLeft()
@@ -211,7 +218,7 @@ function returnHarvest()
     print("Bringing stuff back home.")
     --remember where to return to afterwards
     local returnPosition = {["x"] = distanceFromHome.x, ["y"] = distanceFromHome.y, ["z"] = distanceFromHome.z}
-    local returnRotation = direction;
+    local returnRotation = direction
 
     moveTo({x = 0, y = 0, z = 0}, "x+", {"y", "z", "x"})
     --now the turtle should be standing on the hopper it started at.
@@ -238,7 +245,7 @@ function tryDumpInventory()
     for i = 1, 16, 1 do
         if (isItemInList(i, keepers) == false) then
             turtle.select(i)
-            while (turtle.dropDown() == false) do
+            while (turtle.dropUp() == false) do
                 os.sleep(5)
             end
         end
@@ -383,13 +390,13 @@ function stepForward()
                 elseif (direction == "y-") then
                     distanceFromHome.y = distanceFromHome.y - 1
                 end
-                return true;
+                return true
             else
-                return false;
+                return false
             end
         end
     else
-        return false;
+        return false
     end
 end
 
@@ -447,12 +454,6 @@ end
 function placeBlockFront(blockName)
     if (selectItem(blockName)) then
         turtle.place()
-    end
-end
-
-function placeBlockUp(blockName)
-    if (selectItem(blockName)) then
-        turtle.placeUp()
     end
 end
 
@@ -525,35 +526,55 @@ function isFuelled()
     end
 end
 
---Here begins the actual Script
-print(
-    "Start mining for " ..
-        sessionLength ..
-            " sections which are " .. sideTunnelDistance .. " from each other and " .. sideTunnelLength .. " deep."
-)
-for k = 1, sessionLength, increment do
-    digForward(sideTunnelDistance)
-    endTunnel()
-    turnLeft()
-    digForward(sideTunnelLength)
-    endTunnel()
-    turnLeft()
-    turnLeft()
-    moveForward(sideTunnelLength)
-    digForward(sideTunnelLength)
-    endTunnel()
-    turnLeft()
-    turnLeft()
-    moveForward(sideTunnelLength)
-    --every second passing, set a torch
-    if (k % 2 == 0)then
-        placeBlockUp("minecraft:torch")
+function digDownForward(distance)
+    for i = 1, distance do
+        if (mineDown() == false) then
+            local success, block = turtle.inspectDown()
+
+            if (block~=nil and (block.name == "minecraft:bedrock")) then
+                return false
+            else
+                while (mineDown() == false) do
+                    os.sleep(1)
+                end
+            end
+        end
+        if (i ~= distance) then
+            if (stepForward() == false) then
+                local success, block = turtle.inspect()
+                if (success and block.name == "minecraft:bedrock") then
+                    return false
+                else
+                    while (mine() == false) do
+                        os.sleep(1)
+                    end
+                end
+            end
+        end
     end
-    turnRight()
 end
---return home after digging
-moveTo({["x"] = 0, ["y"] = 0, ["z"] = 0}, "x+", {"y", "z", "x"})
-tryDumpInventory()
---ideas :
--- compressInventory(combine non-full stacks) and compressItems(coalblocks, redstoneblocks...) methods - use tables for recipes and stuff
--- mine veins of interesting ores, specified in a table
+
+--Here begins the actual Script
+print("excavating chunk (width:" .. width .. ", height: " .. height .. ", length: " .. length .. ")")
+
+for z = 1, height do
+    for y = 1, length do
+        if (digDownForward(width) == false) then
+            returnHarvest()
+            os.exit()
+        end
+        if (y ~= length) then
+            if (y % 2 == 1) then
+                turnRight()
+                stepForward()
+                turnRight()
+            else
+                turnLeft()
+                stepForward()
+                turnLeft()
+            end
+        end
+    end
+    moveTo({["x"] = 0, ["y"] = 0, ["z"] = -z}, "x+", {"y", "x", "z"})
+end
+returnHarvest()
